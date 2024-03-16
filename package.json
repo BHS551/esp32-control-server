@@ -15,7 +15,8 @@
   "dependencies": {
     "@aws-cdk/aws-codestar-alpha": "^2.130.0-alpha.0",
     "@aws-sdk/client-s3": "^3.523.0",
-    "aws-cdk-lib": "^2.130.0"
+    "aws-cdk-lib": "^2.130.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/node": "^20.11.22"
