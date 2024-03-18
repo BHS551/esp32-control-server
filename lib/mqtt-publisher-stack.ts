@@ -5,22 +5,24 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import path = require("path");
 import 'dotenv/config'
-import envVars from "../config/envConfig";
-import * as iam from 'aws-cdk-lib/aws-iam';
+import { envVars } from "../config/envConfig";
 
 export class MqttPublisherStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
-
+        console.log("test 1", process.env.BUCKET)
+        console.log("test 1", envVars)
         const mqqtPublisherS3 = new s3.Bucket(this, envVars.Bucket);
 
         const handler = new lambda.Function(this, "MqttPublisher", {
             runtime: lambda.Runtime.NODEJS_18_X,
-            code: lambda.Code.fromAsset(path.join(__dirname, '/../resources/actionsHandler')),
-            handler: "index.handler",
+            code: lambda.Code.fromAsset(path.join(__dirname, '/../resources')),
+            
+            handler: "handlers/actionsHandler/index.handler",
             environment: {
                 BUCKET: mqqtPublisherS3.bucketName
-            }
+            },
+            
         });
 
         // const authFunc = new lambda.Function(this, 'AuthorizationFunction', {

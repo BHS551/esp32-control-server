@@ -1,5 +1,9 @@
 const envVars = {
-    Bucket: process.env.bucket || ""
+    Bucket: ""
 }
 
-export default envVars
+const initializeEnvVars = () => {
+    envVars.Bucket = process.env.BUCKET!
+}
+
+export { envVars, initializeEnvVars }

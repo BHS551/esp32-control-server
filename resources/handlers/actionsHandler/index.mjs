@@ -1,10 +1,4 @@
-
-
-/**
- * @typedef {{ httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH', path: string }} LambdaEvent
- */
-
-import { listObjectNames } from "../../lib/src/deviceRecords";
+import deviceRecords from "../../src/deviceRecords";
 
 /**
  *
@@ -22,7 +16,7 @@ const handleGetRequest = async () => {
         throw err;
     }
     console.log(process.env.BUCKET)
-    const objects = await listObjectNames(process.env.BUCKET);
+    const objects = await deviceRecords.listObjectNames(process.env.BUCKET);
     return buildResponseBody(200, JSON.stringify(objects));
 };
 

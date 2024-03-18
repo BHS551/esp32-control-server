@@ -28,4 +28,6 @@ const listObjectNames = async (bucketName) => {
     return response
 };
 
-export { listObjectNames }
+const deviceRecords  = { listObjectNames }
+
+export default deviceRecords
