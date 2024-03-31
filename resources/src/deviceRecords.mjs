@@ -1,4 +1,5 @@
-import { ListObjectsCommand, S3Client } from "@aws-sdk/client-s3";
+import { ListObjectsCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import moment from "moment";
 
 const s3Client = new S3Client({});
 
@@ -28,6 +29,14 @@ const listObjectNames = async (bucketName) => {
     return response
 };
 
-const deviceRecords  = { listObjectNames }
+const insertRecords = async (recordData) => {
+    const currentDate = moment().toDate(Date.now())
+    const command = new PutObjectCommand({ Bucket: bucketName, body: recordData, key: currentDate });
+    const result = await s3Client.send(command);
+    console.log(result)
+    return result
+}
+
+const deviceRecords = { listObjectNames, insertRecords }
 
 export default deviceRecords

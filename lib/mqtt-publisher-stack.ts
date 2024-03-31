@@ -1,66 +1,101 @@
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
-import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import path = require("path");
 import 'dotenv/config'
-import { envVars } from "../config/envConfig";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
+import * as iot from 'aws-cdk-lib/aws-iot';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as AWS from 'aws-sdk';
+
+
+AWS.config.region = 'us-east-1';
 
 export class MqttPublisherStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
-        console.log("test 1", process.env.BUCKET)
-        console.log("test 1", envVars)
-        const mqqtPublisherS3 = new s3.Bucket(this, envVars.Bucket);
 
-        const handler = new lambda.Function(this, "MqttPublisher", {
+        // BUCKETS
+        const mqqtPublisherS3 = new s3.Bucket(this, process.env.BUCKET!);
+
+        // LAMBDAS
+        const deviceRecordsHandler = new NodejsFunction(this, "MqttPublisher", {
             runtime: lambda.Runtime.NODEJS_18_X,
-            code: lambda.Code.fromAsset(path.join(__dirname, '/../resources')),
-            
-            handler: "handlers/actionsHandler/index.handler",
+            entry: path.join(__dirname, '/../resources/handlers/deviceRecordsHandler.mjs'),
+            handler: "deviceRecordsHandler",
             environment: {
                 BUCKET: mqqtPublisherS3.bucketName
             },
-            
+            bundling: {
+                externalModules: [
+                    '@aws-sdk/*',
+                    'devicerecordssdk@1.0.5',
+                ],
+            },
+        });
+        const deviceRecordsMqttHandler: NodejsFunction = new NodejsFunction(this, "MqttHandler", {
+            runtime: lambda.Runtime.NODEJS_18_X,
+            entry: path.join(__dirname, '/../resources/handlers/deviceRecordsMqttHandler.mjs'),
+            handler: "deviceRecordsMqttHandler",
+            environment: {
+                BUCKET: mqqtPublisherS3.bucketName
+            },
+            bundling: {
+                externalModules: [
+                    '@aws-sdk/*',
+                    'devicerecordssdk@1.0.5',
+                ],
+            },
+            logGroup: new logs.LogGroup(this, 'DeviceRecordsMqttHandlerLogGroup', {
+                retention: logs.RetentionDays.ONE_WEEK, // adjust as needed
+            }),
+            logFormat: lambda.LogFormat.JSON,
         });
 
-        // const authFunc = new lambda.Function(this, 'AuthorizationFunction', {
-        //     runtime: lambda.Runtime.NODEJS_18_X,
-        //     code: lambda.Code.fromAsset(path.join(__dirname, '/../resources/auth')),
-        //     handler: "index.handler",
-        // })
-
-        // const auth = new apigateway.TokenAuthorizer(this, 'NewRequestAuthorizer', {
-        //     handler: authFunc,
-        //     identitySource: 'method.request.header.AuthorizeToken'
-
-        // })
-        // Define your specific IP address
-        // const specificIpAddress = 'YOUR_SPECIFIC_IP_ADDRESS';
-
-        // Create the custom IAM policy
-
-        const api = new apigateway.RestApi(this, "mqttPublisher-api", {
-            restApiName: "Mqtt publisher",
+        // HTTP API
+        const deviceRecordsIntegration = new HttpLambdaIntegration('deviceRecordsIntegration', deviceRecordsHandler);
+        const api = new HttpApi(this, "messagePublisher-api", {
+            apiName: "messagePublisher-api",
             description: "This server publishes messages to a Mqtt broker."
         });
-
-        // Define an IAM policy to allow access to the S3 bucket
-        // const s3PolicyStatement = new iam.PolicyStatement({
-        //     effect: iam.Effect.ALLOW,
-        //     actions: ['s3:GetObject', 's3:PutObject', "s3:ListBucket"], // Adjust actions as needed
-        //     resources: [mqqtPublisherS3.bucketArn + '/*'], // Adjust resource ARN as needed
-        // });
-
-        // handler.role?.addToPrincipalPolicy(s3PolicyStatement)
-
-        mqqtPublisherS3.grantReadWrite(handler)
-
-        const getWidgetsIntegration = new apigateway.LambdaIntegration(handler, {
-            requestTemplates: { "application/json": '{ "statusCode": "200" }' }
+        api.addRoutes({
+            path: '/deviceRecords',
+            methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PATCH, HttpMethod.DELETE],
+            integration: deviceRecordsIntegration,
+        });
+        new cdk.CfnOutput(this, 'APIGatewayEndpoint', {
+            exportName: 'APIGatewayEndpoint',
+            value: api.apiEndpoint,
+            description: 'The endpoint url of the API Gateway'
         });
 
-        api.root.addMethod("GET", getWidgetsIntegration, {}); // GET /
+        // IOT
+        const rule = new iot.CfnTopicRule(this, 'deviceRecordsMqttHandlerTopicRule', {
+            topicRulePayload: {
+                sql: 'SELECT * FROM "/post"',
+                actions: [
+                    {
+                        lambda: {
+                            functionArn: deviceRecordsMqttHandler.functionArn,
+                        },
+                    },
+                ],
+                ruleDisabled: false,
+            },
+        });
+        new iot.CfnThing(this, 'deviceThing', {})
+
+        // PERMISSIONS
+        mqqtPublisherS3.grantReadWrite(deviceRecordsHandler)
+        mqqtPublisherS3.grantReadWrite(deviceRecordsMqttHandler)
+        deviceRecordsMqttHandler.addPermission('AllowIot', {
+            action: 'lambda:InvokeFunction',
+            principal: new iam.ServicePrincipal('iot.amazonaws.com'),
+            sourceArn: rule.attrArn,
+        });
     }
 }
