@@ -6,7 +6,7 @@ const requestMethodToDeviceOperation = {
         return await listDeviceRecords(...args)
     },
     [HttpMethod.POST]: async (...args) => {
-        return await insertDeviceRecord(...args)
+        return await postDeviceMqtt(...args)
     },
 }
 
@@ -24,12 +24,12 @@ const listDeviceRecords = async () => {
     return buildResponseBody(200, objects);
 };
 
-const insertDeviceRecord = async (insertDeviceRecordPayload) => {
-    console.log("[index.insertDeviceRecord] inserting device record: ", insertDeviceRecordPayload)
-    await deviceRecordsSdk.insertDeviceRecord({ ...insertDeviceRecordPayload }, process.env.BUCKET);
-    console.log("[index.insertDeviceRecord] device record inserted")
+const postDeviceMqtt = async (postDeviceMqttPayload) => {
+    console.log("[index.postDeviceMqtt] posting device mqtt: ", postDeviceMqttPayload)
+    await deviceRecordsSdk.postDeviceMqtt({ ...postDeviceMqttPayload });
+    console.log("[index.postDeviceMqtt] device mqtt posted")
     return buildResponseBody(200, {
-        result: "record inserted"
+        result: "device mqtt posted"
     });
 };
 

@@ -23,10 +23,10 @@ export class MqttPublisherStack extends cdk.Stack {
         const mqqtPublisherS3 = new s3.Bucket(this, process.env.BUCKET!);
 
         // LAMBDAS
-        const deviceRecordsHandler = new NodejsFunction(this, "MqttPublisher", {
+        const deviceRecordsMqttPublisher = new NodejsFunction(this, "MqttPublisher", {
             runtime: lambda.Runtime.NODEJS_18_X,
-            entry: path.join(__dirname, '/../resources/handlers/deviceRecordsHandler.mjs'),
-            handler: "deviceRecordsHandler",
+            entry: path.join(__dirname, '/../resources/handlers/deviceRecordsMqttPublisher.mjs'),
+            handler: "deviceRecordsMqttPublisher",
             environment: {
                 BUCKET: mqqtPublisherS3.bucketName
             },
@@ -57,7 +57,7 @@ export class MqttPublisherStack extends cdk.Stack {
         });
 
         // HTTP API
-        const deviceRecordsIntegration = new HttpLambdaIntegration('deviceRecordsIntegration', deviceRecordsHandler);
+        const deviceRecordsIntegration = new HttpLambdaIntegration('deviceRecordsIntegration', deviceRecordsMqttPublisher);
         const api = new HttpApi(this, "messagePublisher-api", {
             apiName: "messagePublisher-api",
             description: "This server publishes messages to a Mqtt broker."
@@ -74,7 +74,7 @@ export class MqttPublisherStack extends cdk.Stack {
         });
 
         // IOT
-        const rule = new iot.CfnTopicRule(this, 'deviceRecordsMqttHandlerTopicRule', {
+        const deviceRecordsRule = new iot.CfnTopicRule(this, 'deviceRecordsMqttHandlerTopicRule', {
             topicRulePayload: {
                 sql: 'SELECT * FROM "/post"',
                 actions: [
@@ -90,12 +90,16 @@ export class MqttPublisherStack extends cdk.Stack {
         new iot.CfnThing(this, 'deviceThing', {})
 
         // PERMISSIONS
-        mqqtPublisherS3.grantReadWrite(deviceRecordsHandler)
+        mqqtPublisherS3.grantReadWrite(deviceRecordsMqttPublisher)
         mqqtPublisherS3.grantReadWrite(deviceRecordsMqttHandler)
         deviceRecordsMqttHandler.addPermission('AllowIot', {
             action: 'lambda:InvokeFunction',
             principal: new iam.ServicePrincipal('iot.amazonaws.com'),
-            sourceArn: rule.attrArn,
+            sourceArn: deviceRecordsRule.attrArn,
         });
+        deviceRecordsMqttPublisher.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['iot:Publish'],
+            resources: [`arn:aws:iot:${AWS.config.region}:${AWS.config.account}${process.env.DEVICE_SHADOW_NAME!}`],
+        }));
     }
 }
