@@ -1,4 +1,5 @@
-import deviceRecordsSdk from "devicerecordssdk/data/records";
+import deviceRecords from "devicerecordssdk/data/records";
+import mqtt from "devicerecordssdk/data/mqtt";
 import { HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 
 const requestMethodToDeviceOperation = {
@@ -12,28 +13,29 @@ const requestMethodToDeviceOperation = {
 
 const operationResolver = async (payload) => {
     console.log("[index.operationResolver] lambda event data: ", payload)
-    const operationFunction = requestMethodToDeviceOperation[payload.method]
-    const response = await operationFunction(payload.body)
+    const deviceOperation = requestMethodToDeviceOperation[payload.method]
+    const response = await deviceOperation(payload.body)
     return response
 };
 
 const listDeviceRecords = async () => {
     console.log("[index.listDeviceRecords] listing device records")
-    const objects = await deviceRecordsSdk.listDeviceRecords(process.env.BUCKET);
+    const objects = await deviceRecords.listDeviceRecords(process.env.BUCKET);
     console.log("[index.listDeviceRecords] device records listed: ", objects)
     return buildResponseBody(200, objects);
 };
 
 const postDeviceMqtt = async (postDeviceMqttPayload) => {
     console.log("[index.postDeviceMqtt] posting device mqtt: ", postDeviceMqttPayload)
-    await deviceRecordsSdk.postDeviceMqtt({ ...postDeviceMqttPayload });
+    await deviceRecords.insertDeviceRecord({ ...postDeviceMqttPayload }, process.env.BUCKET);
+    await mqtt.postDeviceMqtt(postDeviceMqttPayload.topic, postDeviceMqttPayload);
     console.log("[index.postDeviceMqtt] device mqtt posted")
     return buildResponseBody(200, {
         result: "device mqtt posted"
     });
 };
 
-const deviceRecordsHandler = async (event) => {
+const deviceRecordsMqttPublisher = async (event) => {
     console.log("[index.handler] input event: ", { event })
     const { requestContext, body } = event
     const { http } = requestContext
@@ -60,4 +62,4 @@ const buildResponseBody = (status, body, headers = {}) => {
     };
 };
 
-export { deviceRecordsHandler }
+export { deviceRecordsMqttPublisher }

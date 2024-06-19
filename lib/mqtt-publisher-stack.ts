@@ -19,21 +19,26 @@ export class MqttPublisherStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
+        // ENV VARS
+        let envVars: any = {
+            DEVICE_SHADOW_NAME: process.env.DEVICE_SHADOW_NAME!,
+            AWS_ACCOUNT: process.env.AWS_ACCOUNT!,
+        }
+
         // BUCKETS
-        const mqqtPublisherS3 = new s3.Bucket(this, process.env.BUCKET!);
+        const mqqtPublisherS3 = new s3.Bucket(this, 'MqttPublisherStore', {});
+        envVars.BUCKET = mqqtPublisherS3.bucketName
 
         // LAMBDAS
         const deviceRecordsMqttPublisher = new NodejsFunction(this, "MqttPublisher", {
             runtime: lambda.Runtime.NODEJS_18_X,
             entry: path.join(__dirname, '/../resources/handlers/deviceRecordsMqttPublisher.mjs'),
             handler: "deviceRecordsMqttPublisher",
-            environment: {
-                BUCKET: mqqtPublisherS3.bucketName
-            },
+            environment: envVars,
             bundling: {
                 externalModules: [
                     '@aws-sdk/*',
-                    'devicerecordssdk@1.0.5',
+                    'devicerecordssdk@1.0.23'
                 ],
             },
         });
@@ -41,13 +46,11 @@ export class MqttPublisherStack extends cdk.Stack {
             runtime: lambda.Runtime.NODEJS_18_X,
             entry: path.join(__dirname, '/../resources/handlers/deviceRecordsMqttHandler.mjs'),
             handler: "deviceRecordsMqttHandler",
-            environment: {
-                BUCKET: mqqtPublisherS3.bucketName
-            },
+            environment: envVars,
             bundling: {
                 externalModules: [
                     '@aws-sdk/*',
-                    'devicerecordssdk@1.0.5',
+                    'devicerecordssdk@1.0.23'
                 ],
             },
             logGroup: new logs.LogGroup(this, 'DeviceRecordsMqttHandlerLogGroup', {
@@ -97,9 +100,16 @@ export class MqttPublisherStack extends cdk.Stack {
             principal: new iam.ServicePrincipal('iot.amazonaws.com'),
             sourceArn: deviceRecordsRule.attrArn,
         });
+        const deviceArn = `arn:aws:iot:${AWS.config.region}:${process.env.AWS_ACCOUNT}:thing${process.env.DEVICE_SHADOW_NAME!}`
         deviceRecordsMqttPublisher.addToRolePolicy(new iam.PolicyStatement({
             actions: ['iot:Publish'],
-            resources: [`arn:aws:iot:${AWS.config.region}:${AWS.config.account}${process.env.DEVICE_SHADOW_NAME!}`],
+            resources: [deviceArn],
+        }));
+        const secretName = 'hivemq_certificates'
+        const secretsArn = `arn:aws:secretsmanager:${AWS.config.region}:${process.env.AWS_ACCOUNT}:secret:${secretName}*`
+        deviceRecordsMqttPublisher.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['secretsmanager:GetSecretValue'],
+            resources: [secretsArn], // replace with the ARN of your secret
         }));
     }
 }
